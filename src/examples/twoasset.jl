@@ -319,12 +319,12 @@ end
 
 @implicit function pricing(pip=0.1, mc=0.985, r=0.0125, Y=1, κp=0.1, mup=1.015228426395939, εmup=0.0)
     nkpc = κp*(mc-1/mup) + lead(Y)/Y*log(1+lead(pip))/(1+lead(r)) + εmup - log(1+pip)
-    return pip, nkpc, Roots_Default
+    return pip, nkpc, Roots_Default # ret values correspond to unkown, target and solver following python @solved
 end
 
 @implicit ssargs=(:x0=>(5,15),) function arbitrage(p=10, div=0.14, r=0.0125)
     equity = lead(div) + lead(p) - p * (1 + lead(r))
-    return p, equity, Main.Brent
+    return p, equity, Main.Brent # Brent solver takes ssargs as the starting range.
 end
 
 @simple function labor(Y, w, K, Z, α)
@@ -341,7 +341,7 @@ end
     return inv, val
 end
 
-function production_blk(solver)
+function production_blk(solver) # mannualy construct solved block (CombinedBlock) cf. @implicit
     calis = [:Y=>1, :w=>0.6, :Z=>0.4677898145312322, :α=>0.3299492385786802,
         :r=>0.0125, :δ=>0.02, :εI=>4, :εr=>0]
     return block([labor_blk(), investment_blk()],

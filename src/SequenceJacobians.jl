@@ -264,6 +264,7 @@ include("examples/KrusellSmith.jl")
 include("examples/twoasset.jl")
 include("examples/Horvath.jl")
 include("examples/SmetsWouters.jl")
+include("examples/HetSim.jl")
 
 @static if !isdefined(Base, :get_extension)
     function __init__()
