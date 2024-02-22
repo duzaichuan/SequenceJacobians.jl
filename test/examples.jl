@@ -96,9 +96,91 @@ series(irfs')
 
 using SequenceJacobians.HetSim
 m = model(hsblocks())
-calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :Y => 1.0]
-tars = [:asset_mkt => 0, :MPC => 0.25]
-inits = [:β => 0.85, :B => 0.8]
+calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :B=>0.8, :Y => 1.0]
+tars = [:asset_mkt => 0]
+inits = [:β => 0.85]
+# calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :Y => 1.0]
+# tars = [:asset_mkt => 0, :MPC => 0.25]
+# inits = [:β => 0.85, :B => 0.8]
 ss = SteadyState(m, calis, inits, tars)
 solve(Hybrid, ss, ss.inits, ftol=1e-10)
 ss[]
+D_cum = sum(ss.blks[2].ha.D, dims=2) |> vec |> cumsum
+agrid = ss.blks[2].ha.aproc.g
+f = Figure()
+ax = Axis(f[1,1])
+lines!(ax, agrid, D_cum)
+xlims!(ax, 0, 5)
+
+T = 300
+ρ_g = 0.8
+dG = 0.01 .* ρ_g .^ range(0,T-1)
+ρ_b = 0.9
+dB = cumsum(dG) .* ρ_b .^ range(0,T-1)
+J = TotalJacobian(m, [:G, :B, :Y], [:asset_mkt], ss[], T)
+gj = GEJacobian(J, [:G, :B])
+gs = GMaps(gj)
+irfs = impulse(gs, [:G=>dG, :B=>dB])
+dYg = irfs[:G][:Y]
+dYb = irfs[:G][:Y] .+ irfs[:B][:Y]
+dDb = irfs[:G][:deficit] .+ irfs[:B][:deficit]
+lines(dYg[1:50])
+lines!(dYb[1:50])
+lines(dDb[1:50])
+dCg = irfs[:G][:C]
+dCb = irfs[:G][:C] .+ irfs[:B][:C]
+lines(dCg[1:50])
+lines!(dCb[1:50])
+
+dgoods = irfs[:G][:goods_mkt]
+vec(dY)[1:10]
+f = Figure()
+ax1 = Axis(f[1,1])
+lines!(ax1, 1:50, dG[1:50])
+ax2 = Axis(f[1,2])
+lines!(ax2, 1:50, dY[1:50])
+ax3 = Axis(f[1,3])
+lines!(ax3, 1:50, dgoods[1:50])
+
+bhh, bfiscal, bmkt = hsblocks()
+
+@simple function nkpc(π, Y, C, θ_w, vphi, frisch, markup_ss, eis, β)
+    κ_w = (1- θ_w) * (1 - β * θ_w)/θ_w
+    piwres = κ_w * (vphi * Y^(1/frisch) - 1/markup_ss * C^(-1/eis)) + β * lead(π) - π
+    return piwres
+end
+
+@simple function monetary_taylor(π, ishock, rss, φ_π)
+    i = rss + φ_π * π + ishock
+    r_ante = i - lead(π)
+    return r_ante
+end
+
+@simple function ex_post_rate(r_ante)
+    r = lag(r_ante)
+    return r
+end
+
+blocks = (bhh, bfiscal, bmkt, nkpc_blk(), monetary_taylor_blk(), ex_post_rate_blk())
+m_taylor = model(blocks)
+calis = [:eis => 0.5, :G => 0.2, :B => 0.8, :Y => 1.0, :π=>0, :θ_w=>0.9, :frisch=>1, :markup_ss=>1, :ishock=>0, :rss=>0.03, :φ_π=>1.5]
+tars = [:asset_mkt => 0, :piwres=> 0]
+inits = [:β => 0.85, :vphi=>1.0]
+ss_taylor = SteadyState(m_taylor, calis, inits, tars)
+solve(Hybrid, ss_taylor, ss_taylor.inits, ftol=1e-10)
+ss_taylor[]
+
+T = 300
+ρ_g = 0.8
+dG = 0.01 .* ρ_g .^ range(0,T-1)
+ρ_b = 0.9
+dB = cumsum(dG) .* ρ_b .^ range(0,T-1)
+J_taylor = TotalJacobian(m_taylor, [:G, :B, :π, :Y], [:asset_mkt, :piwres], ss_taylor[], T)
+gj = GEJacobian(J_taylor, [:G, :B])
+gs = GMaps(gj)
+irfs_taylor = impulse(gs, [:G=>dG, :B=>dB])
+
+dYb_taylor = irfs_taylor[:G][:Y] .+ irfs_taylor[:B][:Y]
+dDb_taylor = irfs_taylor[:G][:deficit] .+ irfs_taylor[:B][:deficit]
+series([dYb[1:50] dYb_taylor[1:50]]')
+series([dDb[1:50] dDb_taylor[1:50]]')
