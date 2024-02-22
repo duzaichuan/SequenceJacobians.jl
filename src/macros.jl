@@ -133,7 +133,7 @@ function _parsereturnimplicit(rawret, args)
     elseif isexpr(out, :tuple)
         for x in out.args
             if x isa Symbol
-                out in args || push!(retexpr.args, x)
+                x in args || push!(retexpr.args, x)
                 push!(outs, x)
                 push!(outquote.args, Expr(:quote, x))
             else
