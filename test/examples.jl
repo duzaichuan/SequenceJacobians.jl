@@ -96,7 +96,7 @@ series(irfs')
 
 using SequenceJacobians.HetSim
 m = model(hsblocks())
-calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :B=>0.8, :Y => 1.0]
+calis = [:ρe=>0.9, :σe=>0.92, :r => 0.03, :eis => 0.5, :G => 0.2, :B=>0.8, :Y => 1.0]
 tars = [:asset_mkt => 0]
 inits = [:β => 0.85]
 # calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :Y => 1.0]
@@ -264,3 +264,57 @@ series!(ax2, [dYb[1:50] dY_ra[1:50] dY_ta[1:50]]')
 ax3 = Axis(fig[1,3], title="C")
 series!(ax3, [dCb[1:50] dC_ra[1:50] dC_ta[1:50]]', labels=["HA", "RA", "TA"])
 axislegend()
+# HA model generates higher iMPCs off the diagonal.
+
+m = model(hsblocks())
+calis = [:ρe=>0.9, :σe=>0.92, :r => 0.03, :eis => 0.5, :G => 0.2, :B=>0.8, :Y => 1.0]
+tars = [:asset_mkt => 0]
+inits = [:β => 0.85]
+# calis = [:r => 0.03, :eis => 0.5, :G => 0.2, :Y => 1.0]
+# tars = [:asset_mkt => 0, :MPC => 0.25]
+# inits = [:β => 0.85, :B => 0.8]
+ss = SteadyState(m, calis, inits, tars)
+solve(Hybrid, ss, ss.inits, ftol=1e-10)
+ss[]
+
+T = 300
+ρ_σ = 0.8
+dσ = 0.01 .* ρ_σ .^ range(0,T-1)
+J = TotalJacobian(m, [:σe, :Y], [:asset_mkt], ss[], T)
+gj = GEJacobian(J, [:σe])
+gs = GMaps(gj)
+irfs = impulse(gs, [:σe=>dσ])
+dY = irfs[:σe][:Y]
+lines(dY[1:50])
+dC = irfs[:σe][:C]
+lines(dC[1:50])
+dMPC = irfs[:σe][:MPC]
+lines(dMPC[1:50])
+
+ρ_g = 0.8
+dG = 0.01 .* ρ_g .^ range(0,T-1)
+ρ_b = 0.9
+dB = cumsum(dG) .* ρ_b .^ range(0,T-1)
+J_B = TotalJacobian(m, [:G, :B, :Y], [:asset_mkt], ss[], T)
+gj = GEJacobian(J_B, [:G, :B])
+gs = GMaps(gj)
+irfs_B = impulse(gs, [:G=>dG, :B=>dB])
+J = TotalJacobian(m, [:G, :B, :σe, :Y], [:asset_mkt], ss[], T)
+gj = GEJacobian(J, [:G, :B, :σe])
+gs = GMaps(gj)
+irfs = impulse(gs, [:G=>dG, :B=>dB, :σe=>dσ])
+dYb = irfs_B[:G][:Y] .+ irfs_B[:B][:Y]
+dY = irfs[:G][:Y] .+ irfs[:B][:Y] .+ irfs[:σe][:Y]
+dCb = irfs_B[:G][:C] .+ irfs_B[:B][:C]
+dC = irfs[:G][:C] .+ irfs[:B][:C] .+ irfs[:σe][:C]
+dDb = irfs_B[:G][:deficit] .+ irfs_B[:B][:deficit]
+dD = irfs[:G][:deficit] .+ irfs[:B][:deficit] .+ irfs[:σe][:deficit]
+lines(dD[1:50])
+lines!(dDb[1:50])
+lines(dY[1:50])
+lines!(dYb[1:50])
+lines(dC[1:50])
+lines!(dCb[1:50])
+lines(dDb[1:50])
+dCg = irfs[:G][:C]
+

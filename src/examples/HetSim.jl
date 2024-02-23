@@ -26,9 +26,9 @@ struct HSHousehold{TF<:AbstractFloat} <: AbstractHetAgent
     Dlast::Matrix{TF}
 end
 
-function HSHousehold(amin, amax, Na, ρe, σe, Ne)
+function HSHousehold(amin, amax, Na, Ne)
     aproc = assetproc(amin, amax, Na, Na, Ne)
-    eproc = rouwenhorstexp(ρe, σe, Ne)
+    eproc = ExogProc{Float64}(zeros(Ne), fill(1/Ne, Ne,Ne), fill(1/Ne, Ne)) #rouwenhorstexp(ρe, σe, Ne)
     c = Matrix{Float64}(undef, Na, Ne)
     cnext = similar(c)
     clast = similar(c)
@@ -58,8 +58,12 @@ function backward_init!(h::HSHousehold, r, eis, Z)
     h.Va .= (1 + r) .* (0.1 .* h.coh).^(-1/eis)
 end
 
-function backward_endo!(h::HSHousehold, EVa, r, β, eis, Z)
+function backward_endo!(h::HSHousehold, EVa, ρe, σe, r, β, eis, Z)
     agrid = grid(h.aproc)
+    eproc = rouwenhorstexp(ρe, σe, size(h.c, 2))
+    h.eproc.g .= eproc.g
+    h.eproc.m .= eproc.m
+    h.eproc.d .= eproc.d
     egrid = grid(h.eproc)
     h.cnext .= (β.*EVa).^(-eis)
     h.coh .= (1 + r) .* agrid .+ Z .* egrid'
@@ -94,13 +98,13 @@ end
     return asset_mkt, goods_mkt
 end
 
-function hshhblock(amin, amax, Na, ρe, σe, Ne; kwargs...)
-    kshh = HSHousehold(amin, amax, Na, ρe, σe, Ne)
-    return block(kshh, [:r, :β, :eis, :Z], [:A, :C, :MPC]; kwargs...)
+function hshhblock(amin, amax, Na, Ne; kwargs...)
+    kshh = HSHousehold(amin, amax, Na, Ne)
+    return block(kshh, [:ρe, :σe, :r, :β, :eis, :Z], [:A, :C, :MPC]; kwargs...)
 end
 
 function hsblocks(; hhkwargs...)
-    bhh = hshhblock(0, 1000, 200, 0.9, 0.92, 10; hhkwargs...)
+    bhh = hshhblock(0, 1000, 200, 10; hhkwargs...)
     bfiscal = fiscal_blk()
     # bmkt = block(mkt_clearing, [:A, :B, :Y, :C, :G], [:asset_mkt, :goods_mkt])
     bmkt = mkt_clearing_blk()
